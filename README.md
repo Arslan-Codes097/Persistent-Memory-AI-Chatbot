@@ -11,10 +11,10 @@ An intelligent conversational AI assistant built with **Streamlit**, **Groq LLM 
 
 ---
 
-## 🌐 Live Demo & Media
+## 🌐 Live Demo
 
-- **GitHub Repository:** [https://github.com/Arslan-Codes097/Persistent-Memory-AI-Chatbot](https://github.com/Arslan-Codes097/Persistent-Memory-AI-Chatbot)
-- **Deployment Platform:** Streamlit Community Cloud
+- **GitHub Repo:** [https://github.com/Arslan-Codes097/Persistent-Memory-AI-Chatbot](https://github.com/Arslan-Codes097/Persistent-Memory-AI-Chatbot)
+- **Live APP:** https://persistent-memory-ai-chatbot.streamlit.app/
 
 ---
 
