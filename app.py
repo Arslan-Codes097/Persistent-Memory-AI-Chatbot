@@ -1,11 +1,4 @@
 import streamlit as st
-import importlib
-import memory_handler
-import llm_connector
-
-importlib.reload(memory_handler)
-importlib.reload(llm_connector)
-
 from memory_handler import MemoryHandler
 from llm_connector import LLMConnector
 
