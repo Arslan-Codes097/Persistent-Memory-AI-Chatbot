@@ -6,8 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+@st.cache_resource
 def get_mem0_client():
-    """Initializes and returns the Mem0 MemoryClient using Streamlit secrets or environment variables."""
+    """Initializes and caches the Mem0 MemoryClient using Streamlit secrets or environment variables."""
     try:
         api_key = st.secrets["MEM0_API_KEY"]
     except Exception:
@@ -32,7 +33,7 @@ class MemoryHandler:
         """Returns True if the Mem0 client is successfully initialized."""
         return self.client is not None
 
-    def add_interaction(self, user_id: str, user_message: str, assistant_message: str, llm_connector=None) -> bool:
+    def add_interaction(self, user_id: str, user_message: str, assistant_message: str, llm_connector=None, existing_memories: list[dict] = None) -> bool:
         """Intelligently extracts core user facts, overwrites outdated memories, and stores clean statements in Mem0."""
         if not self.is_configured() or not user_id:
             return False
@@ -47,7 +48,8 @@ class MemoryHandler:
             # Skip storing if prompt contains no durable personal facts
             return True
 
-        existing_memories = self.get_all_memories(user_id)
+        if existing_memories is None:
+            existing_memories = self.get_all_memories(user_id)
 
         # Step 2: Process each extracted fact
         for fact in extracted_facts:

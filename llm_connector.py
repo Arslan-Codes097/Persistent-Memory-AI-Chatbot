@@ -7,8 +7,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+@st.cache_resource
 def get_groq_client():
-    """Initializes and returns the Groq client using Streamlit secrets or environment variables."""
+    """Initializes and caches the Groq API client using Streamlit secrets or environment variables."""
     try:
         api_key = st.secrets["GROQ_API_KEY"]
     except Exception:
@@ -33,13 +34,14 @@ class LLMConnector:
         """Returns True if the Groq client is initialized."""
         return self.client is not None
 
-    def fetch_models(self) -> list[str]:
-        """Fetches available Groq models or returns recommended defaults."""
-        if not self.is_configured():
+    @st.cache_data(ttl=600)
+    def fetch_models(_self) -> list[str]:
+        """Fetches available Groq models with 10-minute caching to optimize UI performance."""
+        if not _self.is_configured():
             return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
 
         try:
-            resp = self.client.models.list()
+            resp = _self.client.models.list()
             all_ids = sorted([m.id for m in resp.data])
             priority = [m for m in all_ids if any(x in m for x in ["70b", "versatile", "32b"])]
             rest = [m for m in all_ids if m not in priority]
@@ -141,8 +143,7 @@ class LLMConnector:
     def stream_chat_completion(self, model: str, chat_history: list[dict], memory_facts: list[str]):
         """Creates a streaming response generator from Groq API."""
         if not self.is_configured():
-            yield "GROQ_API_KEY is not configured. Please check your settings."
-            return
+            raise RuntimeError("GROQ_API_KEY is not configured. Please check your settings.")
 
         system_content = self.build_system_prompt(memory_facts)
         api_messages = [{"role": "system", "content": system_content}] + chat_history
@@ -164,8 +165,8 @@ class LLMConnector:
         except Exception as e:
             err_msg = str(e).lower()
             if "rate_limit" in err_msg:
-                yield "Rate limit exceeded. Please wait a moment before trying again."
+                raise RuntimeError("Rate limit exceeded. Please wait a moment before trying again.")
             elif "api key" in err_msg or "authentication" in err_msg:
-                yield "Invalid API Key. Please verify your Groq API credentials."
+                raise RuntimeError("Invalid API Key. Please verify your Groq API credentials.")
             else:
-                yield f"API Error: {str(e)}"
+                raise RuntimeError(f"API Error: {str(e)}")

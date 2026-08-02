@@ -8,7 +8,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Initialize handlers directly for instant hot-reloading
+# Initialize cached singletons
 memory_handler = MemoryHandler()
 llm_connector = LLMConnector()
 
@@ -157,23 +157,33 @@ if prompt := st.chat_input("Type your message here..."):
             for m in st.session_state.messages
         ]
 
-        # Stream response from LLM with memory context
-        stream_gen = llm_connector.stream_chat_completion(
-            model=selected_model,
-            chat_history=chat_history,
-            memory_facts=relevant_memories,
-        )
+        try:
+            # Stream response from LLM with memory context
+            stream_gen = llm_connector.stream_chat_completion(
+                model=selected_model,
+                chat_history=chat_history,
+                memory_facts=relevant_memories,
+            )
 
-        for chunk in stream_gen:
-            full_reply += chunk
-            placeholder.markdown(full_reply + "▌")
-        
-        placeholder.markdown(full_reply)
+            for chunk in stream_gen:
+                full_reply += chunk
+                placeholder.markdown(full_reply + "▌")
+            
+            placeholder.markdown(full_reply)
 
-    # Step 3: Append response to session chat history
-    st.session_state.messages.append({"role": "assistant", "content": full_reply})
+            # Step 3: Append response to session chat history
+            st.session_state.messages.append({"role": "assistant", "content": full_reply})
 
-    # Step 4: Send conversation turn to Mem0 for intelligent extraction & deduplication
-    if full_reply and not full_reply.startswith("API Error") and not full_reply.startswith("GROQ_API_KEY"):
-        with st.spinner("Processing persistent memory..."):
-            memory_handler.add_interaction(user_id, prompt, full_reply, llm_connector)
+            # Step 4: Send conversation turn to Mem0 for intelligent extraction & deduplication
+            if full_reply:
+                with st.spinner("Processing persistent memory..."):
+                    memory_handler.add_interaction(
+                        user_id=user_id,
+                        user_message=prompt,
+                        assistant_message=full_reply,
+                        llm_connector=llm_connector,
+                        existing_memories=stored_memories
+                    )
+
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
