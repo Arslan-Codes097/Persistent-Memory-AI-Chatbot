@@ -33,7 +33,7 @@ class MemoryHandler:
         """Returns True if the Mem0 client is successfully initialized."""
         return self.client is not None
 
-    def add_interaction(self, user_id: str, user_message: str, assistant_message: str, llm_connector=None, existing_memories: list[dict] = None) -> bool:
+    def add_interaction(self, user_id: str, user_message: str, assistant_message: str, llm_connector=None, existing_memories: list[dict] = None, **kwargs) -> bool:
         """Intelligently extracts core user facts, overwrites outdated memories, and stores clean statements in Mem0."""
         if not self.is_configured() or not user_id:
             return False
