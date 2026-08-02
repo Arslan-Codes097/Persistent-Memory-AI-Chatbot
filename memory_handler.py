@@ -34,41 +34,34 @@ class MemoryHandler:
         return self.client is not None
 
     def add_interaction(self, user_id: str, user_message: str, assistant_message: str, llm_connector=None, existing_memories: list[dict] = None, **kwargs) -> bool:
-        """Intelligently extracts core user facts and manages persistent Mem0 storage."""
+        """Intelligently extracts core user facts, preferences, updates outdated memories, and stores clean statements in Mem0."""
         if not self.is_configured() or not user_id:
             return False
         
-        # Step 1: Use LLM connector to extract durable user facts (ignoring chatter & greetings)
+        # Step 1: Use LLM connector to extract durable user facts and preferences
         if llm_connector and hasattr(llm_connector, "extract_user_facts"):
             extracted_facts = llm_connector.extract_user_facts(user_message)
         else:
             extracted_facts = [user_message]
 
         if not extracted_facts:
-            # Skip storing if prompt contains no durable personal facts
+            # Skip storing if prompt contains no durable facts or preferences
             return True
 
         if existing_memories is None:
             existing_memories = self.get_all_memories(user_id)
 
-        # Step 2: Store extracted facts in Mem0
+        # Step 2: Process each extracted fact
         for fact in extracted_facts:
-            # If this is an explicit name update, update existing name memory if it exists
-            if "name" in fact.lower() and existing_memories:
-                name_updated = False
-                for item in existing_memories:
-                    mem_id = item.get("id") if isinstance(item, dict) else None
-                    mem_text = (item.get("memory") if isinstance(item, dict) else str(item)).lower()
-                    if mem_id and "name" in mem_text:
-                        self.update_memory(mem_id, fact)
-                        name_updated = True
-                        break
-                if not name_updated:
-                    try:
-                        self.client.add(fact, user_id=user_id)
-                    except Exception as e:
-                        st.error(f"Error adding memory fact: {e}")
+            target_id = None
+            if llm_connector and hasattr(llm_connector, "find_target_memory_to_update") and existing_memories:
+                target_id = llm_connector.find_target_memory_to_update(fact, existing_memories)
+
+            if target_id:
+                # Update existing memory item (e.g. status change or name update)
+                self.update_memory(target_id, fact)
             else:
+                # Add as a new memory fact (e.g. new preference or distinct topic)
                 try:
                     self.client.add(fact, user_id=user_id)
                 except Exception as e:
