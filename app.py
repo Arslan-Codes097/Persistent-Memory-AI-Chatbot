@@ -121,13 +121,6 @@ if not llm_connector.is_configured():
     st.stop()
 
 
-# Show active injected memories if any
-if st.session_state.last_injected_memories:
-    with st.expander("Context Injection Debugger (Last Turn Memories)", expanded=False):
-        for mem in st.session_state.last_injected_memories:
-            st.markdown(f"- {mem}")
-
-
 # Render previous conversation history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):

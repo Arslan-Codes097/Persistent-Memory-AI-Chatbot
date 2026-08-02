@@ -25,7 +25,7 @@ def get_groq_client():
 
 
 class LLMConnector:
-    """Manages Groq LLM API interaction, memory context injection, and intelligent fact processing."""
+    """Manages Groq LLM API interaction, memory context injection, and intelligent fact extraction."""
 
     def __init__(self):
         self.client = get_groq_client()
@@ -77,13 +77,14 @@ class LLMConnector:
 
         system_prompt = (
             "You are an expert fact extractor. Analyze the user's message and extract durable, long-term personal facts, "
-            "preferences, background details, or status updates about the user.\n"
-            "Return ONLY a valid JSON object with the schema:\n"
-            '{\n  "facts": ["User preference or status fact 1", "User fact 2"]\n}\n'
-            "Rules:\n"
-            "1. Ignore greetings, general queries, general knowledge questions, and conversational chatter.\n"
-            "2. Only extract durable facts explicitly stated by the user about themselves.\n"
-            "3. If no durable user facts exist, return {\"facts\": []}."
+            "preferences, background details, or status updates explicitly stated by the user.\n"
+            "Return ONLY a valid JSON object with schema:\n"
+            '{\n  "facts": ["User fact 1", "User fact 2"]\n}\n'
+            "Strict Rules:\n"
+            "1. Extract facts FAITHFULLY to what the user stated. DO NOT extrapolate, assume completion, or alter status.\n"
+            "   - Example: If user says 'persuing degree of CS', extract 'Pursuing CS degree at UET Lahore'. DO NOT write 'Degree earned'!\n"
+            "2. Ignore greetings, general questions, requests, and general knowledge queries.\n"
+            "3. If no durable personal facts exist, return {\"facts\": []}."
         )
 
         try:
@@ -98,45 +99,6 @@ class LLMConnector:
             )
             data = json.loads(resp.choices[0].message.content)
             return data.get("facts", [])
-        except Exception:
-            return []
-
-    def find_obsolete_memory_ids(self, new_fact: str, existing_memories: list[dict]) -> list[str]:
-        """Identifies existing memory IDs that are contradicted or rendered obsolete by a new fact."""
-        if not self.is_configured() or not new_fact or not existing_memories:
-            return []
-
-        system_prompt = (
-            "You are a memory manager. Given a new user fact and a list of existing stored memory items (each with 'id' and 'memory'), "
-            "identify existing memory items that are contradicted, outdated, or superseded by the new fact.\n"
-            "Return ONLY a valid JSON object with schema:\n"
-            '{\n  "obsolete_ids": ["mem_id_1"]\n}\n'
-            "If no existing memory is contradicted or outdated, return {\"obsolete_ids\": []}."
-        )
-
-        payload = {
-            "new_fact": new_fact,
-            "existing_memories": [
-                {"id": item.get("id"), "memory": item.get("memory")}
-                for item in existing_memories if isinstance(item, dict) and item.get("id") and item.get("memory")
-            ]
-        }
-
-        if not payload["existing_memories"]:
-            return []
-
-        try:
-            resp = self.client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": json.dumps(payload)}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.0
-            )
-            data = json.loads(resp.choices[0].message.content)
-            return data.get("obsolete_ids", [])
         except Exception:
             return []
 

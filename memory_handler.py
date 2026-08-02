@@ -34,7 +34,7 @@ class MemoryHandler:
         return self.client is not None
 
     def add_interaction(self, user_id: str, user_message: str, assistant_message: str, llm_connector=None, existing_memories: list[dict] = None, **kwargs) -> bool:
-        """Intelligently extracts core user facts, overwrites outdated memories, and stores clean statements in Mem0."""
+        """Intelligently extracts core user facts and manages persistent Mem0 storage."""
         if not self.is_configured() or not user_id:
             return False
         
@@ -51,21 +51,24 @@ class MemoryHandler:
         if existing_memories is None:
             existing_memories = self.get_all_memories(user_id)
 
-        # Step 2: Process each extracted fact
+        # Step 2: Store extracted facts in Mem0
         for fact in extracted_facts:
-            obsolete_ids = []
-            if llm_connector and hasattr(llm_connector, "find_obsolete_memory_ids") and existing_memories:
-                obsolete_ids = llm_connector.find_obsolete_memory_ids(fact, existing_memories)
-
-            if obsolete_ids:
-                # Use Mem0's native update method on the existing memory ID
-                target_id = obsolete_ids[0]
-                self.update_memory(target_id, fact)
-                # Clean up any extra redundant memory IDs if multiple existed
-                for extra_id in obsolete_ids[1:]:
-                    self.delete_single_memory(extra_id)
+            # If this is an explicit name update, update existing name memory if it exists
+            if "name" in fact.lower() and existing_memories:
+                name_updated = False
+                for item in existing_memories:
+                    mem_id = item.get("id") if isinstance(item, dict) else None
+                    mem_text = (item.get("memory") if isinstance(item, dict) else str(item)).lower()
+                    if mem_id and "name" in mem_text:
+                        self.update_memory(mem_id, fact)
+                        name_updated = True
+                        break
+                if not name_updated:
+                    try:
+                        self.client.add(fact, user_id=user_id)
+                    except Exception as e:
+                        st.error(f"Error adding memory fact: {e}")
             else:
-                # Add as a new memory fact if no existing memory was superseded
                 try:
                     self.client.add(fact, user_id=user_id)
                 except Exception as e:
