@@ -51,17 +51,23 @@ class MemoryHandler:
 
         # Step 2: Process each extracted fact
         for fact in extracted_facts:
-            # Find and delete any existing memories contradicted or rendered obsolete by this new fact
+            obsolete_ids = []
             if llm_connector and hasattr(llm_connector, "find_obsolete_memory_ids") and existing_memories:
                 obsolete_ids = llm_connector.find_obsolete_memory_ids(fact, existing_memories)
-                for mem_id in obsolete_ids:
-                    self.delete_single_memory(mem_id)
 
-            # Add the clean, single-fact string to Mem0
-            try:
-                self.client.add(fact, user_id=user_id)
-            except Exception as e:
-                st.error(f"Error adding memory fact: {e}")
+            if obsolete_ids:
+                # Use Mem0's native update method on the existing memory ID
+                target_id = obsolete_ids[0]
+                self.update_memory(target_id, fact)
+                # Clean up any extra redundant memory IDs if multiple existed
+                for extra_id in obsolete_ids[1:]:
+                    self.delete_single_memory(extra_id)
+            else:
+                # Add as a new memory fact if no existing memory was superseded
+                try:
+                    self.client.add(fact, user_id=user_id)
+                except Exception as e:
+                    st.error(f"Error adding memory fact: {e}")
 
         return True
 
@@ -92,6 +98,18 @@ class MemoryHandler:
         except Exception as e:
             st.warning(f"Unable to retrieve memories: {e}")
             return []
+
+    def update_memory(self, memory_id: str, new_text: str) -> bool:
+        """Updates an existing memory item by memory_id using Mem0's native update endpoint."""
+        if not self.is_configured() or not memory_id or not new_text:
+            return False
+
+        try:
+            self.client.update(memory_id=memory_id, text=new_text)
+            return True
+        except Exception as e:
+            st.error(f"Failed to update memory item: {e}")
+            return False
 
     def delete_single_memory(self, memory_id: str) -> bool:
         """Deletes a specific memory item by memory_id."""
