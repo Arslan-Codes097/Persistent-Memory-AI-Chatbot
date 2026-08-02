@@ -1,4 +1,5 @@
 import os
+import json
 import streamlit as st
 from groq import Groq
 from dotenv import load_dotenv
@@ -23,7 +24,7 @@ def get_groq_client():
 
 
 class LLMConnector:
-    """Manages Groq LLM API interaction and memory context injection."""
+    """Manages Groq LLM API interaction, memory context injection, and intelligent fact processing."""
 
     def __init__(self):
         self.client = get_groq_client()
@@ -66,6 +67,76 @@ class LLMConnector:
             "2. Do not explicitly state 'According to my database' or 'My memory says' unless asked.\n"
             "3. Speak naturally as a human friend or assistant who remembers previous conversations."
         )
+
+    def extract_user_facts(self, user_message: str) -> list[str]:
+        """Intelligently extracts durable personal facts/preferences/status about the user from a prompt."""
+        if not self.is_configured() or not user_message:
+            return []
+
+        system_prompt = (
+            "You are an expert fact extractor. Analyze the user's message and extract durable, long-term personal facts, "
+            "preferences, background details, or status updates about the user.\n"
+            "Return ONLY a valid JSON object with the schema:\n"
+            '{\n  "facts": ["User preference or status fact 1", "User fact 2"]\n}\n'
+            "Rules:\n"
+            "1. Ignore greetings, general queries, general knowledge questions, and conversational chatter.\n"
+            "2. Only extract durable facts explicitly stated by the user about themselves.\n"
+            "3. If no durable user facts exist, return {\"facts\": []}."
+        )
+
+        try:
+            resp = self.client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.0
+            )
+            data = json.loads(resp.choices[0].message.content)
+            return data.get("facts", [])
+        except Exception:
+            return []
+
+    def find_obsolete_memory_ids(self, new_fact: str, existing_memories: list[dict]) -> list[str]:
+        """Identifies existing memory IDs that are contradicted or rendered obsolete by a new fact."""
+        if not self.is_configured() or not new_fact or not existing_memories:
+            return []
+
+        system_prompt = (
+            "You are a memory manager. Given a new user fact and a list of existing stored memory items (each with 'id' and 'memory'), "
+            "identify existing memory items that are contradicted, outdated, or superseded by the new fact.\n"
+            "Return ONLY a valid JSON object with schema:\n"
+            '{\n  "obsolete_ids": ["mem_id_1"]\n}\n'
+            "If no existing memory is contradicted or outdated, return {\"obsolete_ids\": []}."
+        )
+
+        payload = {
+            "new_fact": new_fact,
+            "existing_memories": [
+                {"id": item.get("id"), "memory": item.get("memory")}
+                for item in existing_memories if isinstance(item, dict) and item.get("id") and item.get("memory")
+            ]
+        }
+
+        if not payload["existing_memories"]:
+            return []
+
+        try:
+            resp = self.client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": json.dumps(payload)}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.0
+            )
+            data = json.loads(resp.choices[0].message.content)
+            return data.get("obsolete_ids", [])
+        except Exception:
+            return []
 
     def stream_chat_completion(self, model: str, chat_history: list[dict], memory_facts: list[str]):
         """Creates a streaming response generator from Groq API."""

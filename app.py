@@ -82,10 +82,19 @@ with st.sidebar:
     
     if stored_memories:
         st.caption(f"Facts remembered for '{user_name_display}': {len(stored_memories)}")
-        with st.expander("View Stored Facts", expanded=False):
-            for idx, item in enumerate(stored_memories, 1):
+        with st.expander("View & Manage Stored Facts", expanded=True):
+            for idx, item in enumerate(stored_memories):
+                mem_id = item.get("id") if isinstance(item, dict) else str(idx)
                 mem_text = item.get("memory") if isinstance(item, dict) else str(item)
-                st.markdown(f"**{idx}.** {mem_text}")
+
+                with st.container(border=True):
+                    st.markdown(f"**Fact #{idx + 1}**")
+                    st.write(mem_text)
+                    if st.button("🗑️ Delete", key=f"del_fact_{mem_id}_{idx}", use_container_width=True):
+                        if memory_handler.delete_single_memory(mem_id):
+                            st.toast("Memory deleted successfully!", icon="🗑️")
+                            st.session_state.last_injected_memories = []
+                            st.rerun()
     else:
         st.info(f"No persistent facts recorded yet for '{user_name_display}'.")
 
@@ -164,7 +173,7 @@ if prompt := st.chat_input("Type your message here..."):
     # Step 3: Append response to session chat history
     st.session_state.messages.append({"role": "assistant", "content": full_reply})
 
-    # Step 4: Send conversation turn to Mem0 for memory update & extraction
+    # Step 4: Send conversation turn to Mem0 for intelligent extraction & deduplication
     if full_reply and not full_reply.startswith("API Error") and not full_reply.startswith("GROQ_API_KEY"):
-        with st.spinner("Updating persistent memory..."):
-            memory_handler.add_interaction(user_id, prompt, full_reply)
+        with st.spinner("Processing persistent memory..."):
+            memory_handler.add_interaction(user_id, prompt, full_reply, llm_connector)
