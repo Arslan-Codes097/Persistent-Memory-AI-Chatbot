@@ -25,7 +25,7 @@ def get_groq_client():
 
 
 class LLMConnector:
-    """Manages Groq LLM API interaction, memory context injection, intelligent fact extraction, and target memory resolution."""
+    """Manages Groq LLM API interaction, memory context injection, intelligent fact extraction, and topic-isolated memory target resolution."""
 
     def __init__(self):
         self.client = get_groq_client()
@@ -81,17 +81,17 @@ class LLMConnector:
             "Return ONLY a valid JSON object with schema:\n"
             '{\n  "facts": ["User fact 1", "User fact 2"]\n}\n'
             "Rules:\n"
-            "1. DO include personal preferences (e.g. 'I love mangoes' -> 'User loves mangoes', 'I love pizza' -> 'User loves pizza').\n"
+            "1. DO include personal preferences (e.g. 'I love mangoes' -> 'User loves mangoes').\n"
             "2. DO include status updates (e.g. 'I completed my CS degree' -> 'User completed CS degree').\n"
             "3. DO NOT extrapolate or alter status beyond what was stated.\n"
             "4. Ignore generic greetings ('hello'), bot commands, and general knowledge questions.\n"
             "5. Format each fact as a clear third-person statement starting with 'User...' or 'Name: ...'.\n"
-            "6. If no durable personal facts or preferences exist, return {\"facts\": []}."
+            "6. If no durable personal facts exist, return {\"facts\": []}."
         )
 
         try:
             resp = self.client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message}
@@ -110,18 +110,18 @@ class LLMConnector:
             return None
 
         system_prompt = (
-            "You are an intelligent memory update resolver. Analyze a new user fact against a list of existing stored memories (each with 'id' and 'memory').\n"
-            "Identify if the new fact is a direct status update, correction, or replacement for an existing memory on the EXACT SAME topic.\n"
-            "Examples of valid updates:\n"
-            "- 'User completed CS degree' updates 'User is pursuing CS degree' (education status change)\n"
-            "- 'User completed ML internship' updates 'User is interning in Machine Learning' (work status change)\n"
-            "- 'Name: Bilal Babar' updates 'Name: Arslan Babar' (name correction)\n"
-            "- 'User is 26 years old' updates 'User is 25 years old' (age update)\n"
-            "Examples of NON-updates (return null):\n"
-            "- 'User loves pizza' does NOT update 'User is pursuing CS degree' (different topics)\n"
-            "- 'User loves pizza' does NOT update 'User loves mangoes' (different food preferences, keep both)\n"
-            "Return ONLY a JSON object:\n"
-            '{\n  "update_id": "mem_id_here_or_null"\n}'
+            "You are an expert memory topic classifier and update resolver.\n"
+            "Your job is to determine if a new user fact is a direct STATUS UPDATE or REPLACEMENT for an existing memory.\n"
+            "STRICT RULE: An update_id MUST ONLY be returned if the new fact and existing memory belong to the EXACT SAME TOPIC CATEGORY.\n\n"
+            "Topic Categories:\n"
+            "- Name: (e.g. 'Name: Bilal Babar' replaces 'Name: Arslan Babar') -> MATCH\n"
+            "- Education: (e.g. 'User completed CS degree' replaces 'User pursuing CS degree') -> MATCH\n"
+            "- Work/Internship: (e.g. 'User completed ML internship' replaces 'User interning in ML') -> MATCH\n"
+            "- Preferences/Food: (e.g. 'User loves pizza' vs 'User loves mangoes') -> DO NOT MATCH (return null, keep both!)\n\n"
+            "CROSS-TOPIC RULE (CRITICAL):\n"
+            "- Work/Internship does NOT replace Education (e.g. 'Doing ML internship' does NOT replace 'Pursuing CS degree at UET'). Return null!\n"
+            "- Food/Hobbies does NOT replace Education or Work. Return null!\n\n"
+            "Return ONLY JSON: {\"update_id\": \"mem_id_here_or_null\"}"
         )
 
         payload = {
@@ -137,7 +137,7 @@ class LLMConnector:
 
         try:
             resp = self.client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": json.dumps(payload)}
@@ -147,7 +147,7 @@ class LLMConnector:
             )
             data = json.loads(resp.choices[0].message.content)
             res_id = data.get("update_id")
-            return res_id if res_id and res_id != "null" else None
+            return res_id if res_id and res_id != "null" and res_id != "None" else None
         except Exception:
             return None
 
